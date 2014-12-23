@@ -5,6 +5,13 @@ Sometimes it is helpful to keep you listing on top of the pile. This script will
 help.
 
 
+## Installation
+
+Install required packages:
+
+`pip install -r requirements.txt`
+
+
 ## Instructions
 
 You will need to manually get the category ID and subcategory ID from KSL. Just
