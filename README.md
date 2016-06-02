@@ -29,7 +29,14 @@ Look at example.py for an example script to add a classified ad.
 
 ## Debugging
 
-When the script runs it will create various .html files. 
+When the script runs it will create various .html files. Create the relister
+object with debug set to true
+
+```
+from relister import Relister
+
+relister = Relister(debug=True)
+```
 
 * 1.html: This is the output of posted basic ad details. It should contain 
   content for step 2, contact infomation.

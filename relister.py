@@ -18,6 +18,10 @@ class Relister(object):
     session = requests.session()
     sid = None
     fid = None
+    debug = False
+
+    def __init__(self, debug=False):
+        self.debug = debug
 
     def login(self, email, password):
         """
@@ -76,6 +80,7 @@ class Relister(object):
         self.sid = soup.find('input', attrs={'name': 'sid'}).attrs['value']
         self.fid = soup.find('input', attrs={'name': 'fid'}).attrs['value']
         form_45 = soup.find('input', attrs={'name': 'form_45'}).attrs['value']
+        print "sid: {}; fid: {}".format(self.sid, self.fid)
 
         base_payload = {
             'nid': 640,
@@ -99,7 +104,8 @@ class Relister(object):
         }.items())
         print "creating the ad"
         resp = self.session.post(url, payload)
-        open('1.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
+        if self.debug:
+            open('1.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
         payload = OrderedDict(base_payload.items() + {
             # page 2
@@ -127,7 +133,8 @@ class Relister(object):
         resp = self.session.post(url, payload)
         soup = BeautifulSoup(resp.text, 'lxml')
         aid = soup.find('input', attrs={'name': 'aid'}).attrs['value']
-        open('2.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
+        if self.debug:
+            open('2.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
         # upload images
         for key in images.keys():
@@ -135,7 +142,8 @@ class Relister(object):
 
         print "accepting terms"
         resp = self.session.post(url, base_payload)
-        open('3.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
+        if self.debug:
+            open('3.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
         payload = dict(base_payload.items() + {
             'memberstuff': '',
@@ -143,7 +151,8 @@ class Relister(object):
         }.items())
         print "publishing ad"
         resp = self.session.post(url, payload)
-        open('4.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
+        if self.debug:
+            open('4.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
     def upload_image(self, aid, img_path, description=''):
         """
@@ -170,7 +179,8 @@ class Relister(object):
         }
 
         resp = self.session.post(url, payload, files=files)
-        open('image.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
+        if self.debug:
+            open('image.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
     @staticmethod
     def split_phone(phone):

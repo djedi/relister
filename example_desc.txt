@@ -1,3 +1,0 @@
-This is an example description.
-
-KSL requires that posted descriptions end with windows line endings (\r\n) to maintain line breaks.
