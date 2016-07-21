@@ -11,13 +11,12 @@ def enum(**enums):
     return type('Enum', (), enums)
 
 AD_TYPES = enum(sale='sale', wanted='wanted')
-SELLER_TYPES = enum(private=0, business=1)
+SELLER_TYPES = enum(private='Private', business='Business')
 
 
 class Relister(object):
     session = requests.session()
-    sid = None
-    fid = None
+    id = None
     debug = False
 
     def __init__(self, debug=False):
@@ -43,12 +42,12 @@ class Relister(object):
     def post_item(self, category, subcategory, price, title, description,
                   display_name, email, home_phone, address, city, state,
                   zip_code,
-                  ad_type='sale', seller=0, work_phone=None, cell_phone=None,
+                  ad_type='Sale', seller=SELLER_TYPES.private, work_phone=None, cell_phone=None,
                   address2=None, images=None):
         """
         Post classified item to KSL.com
-        :param category: category ID
-        :param subcategory: sub-category ID
+        :param category: category name
+        :param subcategory: sub-category name
         :param price: asking price
         :param title: classified title
         :param description: descriptive text
@@ -62,120 +61,106 @@ class Relister(object):
         :param state: state, 2 digit code eg. 'UT'
         :param zip_code: zip code
 
-        :param ad_type: 'sale' or 'wanted'
+        :param ad_type: 'Sale' or 'Wanted'
         :param seller: 0=private, 1=business
         :param work_phone: phone as 10 digit number 8015551234
         :param cell_phone: phone as 10 digit number 8015551234
         :param images: dict or OrderedDict of local image paths
         :return:
         """
-        # https://www.ksl.com/index.php?nid=640&form_3=345&form_4=615
-        url = 'https://www.ksl.com/index.php?nid=640&form_3={}&form_4={}'.format(
-            category, subcategory)
+        url = 'https://www.ksl.com/classifieds/sell-v1/s1'
 
         # Get sid & fid
-        print "getting sid & fid"
+        print "initializing..."
         resp = self.session.get(url)
-        soup = BeautifulSoup(resp.text, 'lxml')
-        self.sid = soup.find('input', attrs={'name': 'sid'}).attrs['value']
-        self.fid = soup.find('input', attrs={'name': 'fid'}).attrs['value']
-        form_45 = soup.find('input', attrs={'name': 'form_45'}).attrs['value']
-        print "sid: {}; fid: {}".format(self.sid, self.fid)
-
-        base_payload = {
-            'nid': 640,
-            'sid': self.sid,
-            'fid': self.fid,
-            'next': 'Next Page >>',
-        }
+        if self.debug:
+            open('0.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
         home = self.split_phone(home_phone)
         work = self.split_phone(work_phone)
         cell = self.split_phone(cell_phone)
-        payload = dict(base_payload.items() + {
-            'form_3': category,
-            'form_4': subcategory,
-            'form_6': price,
-            'form_8': title,
-            'form_136': 'sale',
-            'form_135': 0,  # private
-            'form_9': description,
-            'form_45': form_45,
-        }.items())
-        print "creating the ad"
+
+        payload = {
+            'category': category,
+            'subCategory': subcategory,
+            'price': price,
+            'title': title,
+            'marketType': ad_type,
+            'sellerType': seller,
+            'description': description,
+            'next': 'Next Page >>',
+        }
+        url = 'https://www.ksl.com/classifieds/sell-v1/s1-submit'
         resp = self.session.post(url, payload)
         if self.debug:
             open('1.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
-
-        payload = OrderedDict(base_payload.items() + {
-            # page 2
-            'form_11': display_name,
-            'form_12': email,
-            'form_13': email,
-            'form_73_a': home[0],
-            'form_73_b': home[1],
-            'form_73_c': home[2],
-            'form_74_a': work[0],
-            'form_74_b': work[2],
-            'form_74_c': work[1],
-            'form_75_a': cell[0],
-            'form_75_b': cell[1],
-            'form_75_c': cell[2],
-            'form_34': address,
-            'form_35': address2,
-            'form_36': city,
-            'form_37': state,
-            'form_38': zip_code,
-        }.items())
-        payload = OrderedDict(sorted(payload.items(), key=lambda t: t[0]))
-        print payload
-        print "adding contact info"
-        resp = self.session.post(url, payload)
         soup = BeautifulSoup(resp.text, 'lxml')
-        aid = soup.find('input', attrs={'name': 'aid'}).attrs['value']
+        self.id = soup.find('input', attrs={'name': 'id'}).attrs['value']
+
+        print "adding contact info"
+        payload = {
+            'id': self.id,
+            'name': display_name,
+            'email': email,
+            'confirmEmail': email,
+            'homePhoneAreaCode': home[0],
+            'homePhonePrefix': home[1],
+            'homePhoneSuffix': home[2],
+            'workPhoneAreaCode': work[0],
+            'workPhonePrefix': work[1],
+            'workPhoneSuffix': work[2],
+            'cellPhoneAreaCode': cell[0],
+            'cellPhonePrefix': cell[1],
+            'cellPhoneSuffix': cell[2],
+            'address1': address,
+            'address2': address2,
+            'city': city,
+            'state': state,
+            'zip': zip_code,
+            'next': 'Next Page >>',
+        }
+
+        url = 'https://www.ksl.com/classifieds/sell-v1/s2-submit/id/{}'.format(
+            self.id)
+        resp = self.session.post(url, payload)
         if self.debug:
             open('2.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
         # upload images
         for key in images.keys():
-            self.upload_image(aid, images[key], key)
+            self.upload_image(images[key], key)
 
         print "accepting terms"
-        resp = self.session.post(url, base_payload)
+        url = 'https://www.ksl.com/classifieds/sell-v1/' \
+              's-post-tos-submit/id/{}'.format(self.id)
+        payload = {
+            'id': self.id,
+            'memberstuff': '',
+            'next': 'Next Page >>',
+        }
+        resp = self.session.post(url, payload)
         if self.debug:
             open('3.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
-        payload = dict(base_payload.items() + {
-            'memberstuff': '',
-            'post_source': 'desktop',
-        }.items())
-        print "publishing ad"
-        resp = self.session.post(url, payload)
-        if self.debug:
-            open('4.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
-
-    def upload_image(self, aid, img_path, description=''):
+    def upload_image(self, img_path, description=''):
         """
         Uploads an image to the ad
         :param img_path: local path of image to upload. Should be 640x480
+        :param description: image description
         :return:
         """
         print 'uploading {} - {}'.format(img_path, description)
-        url = 'https://www.ksl.com/resources/form/upload.php'
+        url = 'https://www.ksl.com/classifieds/sell-v1/upload-photo'
 
         payload = {
-            'nid': 640,
-            'sid': self.sid,
-            'fid': self.fid,
-            'source': 'airlock',
-            'aid': aid,
+            'id': self.id,
             'MAX_FILE_SIZE': 10000000,
-            'd-142': description,
-            's-142': 'Upload file',
+            'description': description,
+            'imageFileSubmit': 'Upload file',
         }
 
         files = {
-            '142': ('image.jpg', open(img_path, 'rb')),
+            'imageFile': ('image.jpg', open(img_path, 'rb')),
         }
 
         resp = self.session.post(url, payload, files=files)

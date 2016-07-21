@@ -6,13 +6,13 @@ sys.path.append('..')
 
 from relister import Relister, AD_TYPES, SELLER_TYPES
 
-CATEGORY = 40
-SUBCATEGORY = 365
+CATEGORY = 'Furniture'
+SUBCATEGORY = 'Dining Tables'
 PRICE = 80
 
 
 # Create Relister instance
-relister = Relister()
+relister = Relister(debug=True)
 
 # Log in to KSL with username & password
 relister.login('youremail@example.com', 'KSLPassword')
