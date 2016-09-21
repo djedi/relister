@@ -1,6 +1,6 @@
-from collections import OrderedDict
+import os
+import json
 
-from bs4 import BeautifulSoup
 import requests
 
 
@@ -21,6 +21,7 @@ class Relister(object):
 
     def __init__(self, debug=False):
         self.debug = debug
+        self.photos = []
 
     def login(self, email, password):
         """
@@ -40,10 +41,9 @@ class Relister(object):
         resp = self.session.post(LOGIN_URL, payload)
 
     def post_item(self, category, subcategory, price, title, description,
-                  display_name, email, home_phone, address, city, state,
-                  zip_code,
-                  ad_type='Sale', seller=SELLER_TYPES.private, work_phone=None, cell_phone=None,
-                  address2=None, images=None):
+                  display_name, email, phone, city, state, zip_code,
+                  ad_type='Sale', seller=SELLER_TYPES.private,
+                  images=None, accept_text=1):
         """
         Post classified item to KSL.com
         :param category: category name
@@ -53,22 +53,19 @@ class Relister(object):
         :param description: descriptive text
         :param display_name: name of contact person
         :param email: contact email
-        :param home_phone: phone as 10 digit number 8015551234
+        :param phone: phone as 10 digit number 8015551234
 
-        :param address: address line 1
-        :param address2: address line 2
         :param city: city
         :param state: state, 2 digit code eg. 'UT'
         :param zip_code: zip code
 
         :param ad_type: 'Sale' or 'Wanted'
         :param seller: 0=private, 1=business
-        :param work_phone: phone as 10 digit number 8015551234
-        :param cell_phone: phone as 10 digit number 8015551234
         :param images: dict or OrderedDict of local image paths
+        :param accept_text: phone number can receive texts? 1=yes, 0=no
         :return:
         """
-        url = 'https://www.ksl.com/classifieds/sell-v1/s1'
+        url = 'https://www.ksl.com/classifieds/sell'
 
         # Get sid & fid
         print "initializing..."
@@ -76,109 +73,81 @@ class Relister(object):
         if self.debug:
             open('0.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
-        home = self.split_phone(home_phone)
-        work = self.split_phone(work_phone)
-        cell = self.split_phone(cell_phone)
+        self.get_session_id()
+
+        # upload images
+        for key in images.keys():
+            self.upload_photo(images[key])
+
+        photo_order = ','.join([p['id'] for p in self.photos])
 
         payload = {
+            'acceptText': accept_text,
             'category': category,
-            'subCategory': subcategory,
-            'price': price,
-            'title': title,
-            'marketType': ad_type,
-            'sellerType': seller,
+            'city': city,
             'description': description,
-            'next': 'Next Page >>',
+            'email': email,
+            'id': self.id,
+            'lat': '',
+            'latLonSource': '',
+            'lon': '',
+            'marketType': ad_type,
+            'name': display_name,
+            'photoOrder': photo_order,
+            'price': '${}'.format(price),
+            'primaryPhone': phone,
+            'sellerType': seller,
+            'state': state,
+            'subCategory': subcategory,
+            'title': title,
+            'zip': zip_code,
         }
-        url = 'https://www.ksl.com/classifieds/sell-v1/s1-submit'
+        url = 'https://www.ksl.com/classifieds/sell/save-main-ad-data'
         resp = self.session.post(url, payload)
         if self.debug:
             open('1.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
-        soup = BeautifulSoup(resp.text, 'lxml')
-        self.id = soup.find('input', attrs={'name': 'id'}).attrs['value']
 
-        print "adding contact info"
+        url = 'https://www.ksl.com/classifieds/sell/activate-ad'
         payload = {
             'id': self.id,
-            'name': display_name,
-            'email': email,
-            'confirmEmail': email,
-            'homePhoneAreaCode': home[0],
-            'homePhonePrefix': home[1],
-            'homePhoneSuffix': home[2],
-            'workPhoneAreaCode': work[0],
-            'workPhonePrefix': work[1],
-            'workPhoneSuffix': work[2],
-            'cellPhoneAreaCode': cell[0],
-            'cellPhonePrefix': cell[1],
-            'cellPhoneSuffix': cell[2],
-            'address1': address,
-            'address2': address2,
-            'city': city,
-            'state': state,
-            'zip': zip_code,
-            'next': 'Next Page >>',
         }
-
-        url = 'https://www.ksl.com/classifieds/sell-v1/s2-submit/id/{}'.format(
-            self.id)
         resp = self.session.post(url, payload)
         if self.debug:
             open('2.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
 
-        # upload images
-        for key in images.keys():
-            self.upload_image(images[key], key)
+    def get_session_id(self):
+        """
+        Makes call to create an ad session ID
+        :return: session Id
+        """
+        url = 'https://www.ksl.com/classifieds/sell/create-stub?' \
+              'XDEBUG_SESSION_START=1'
+        resp = self.session.post(url)
+        resp_obj = json.loads(resp.text)
+        self.id = resp_obj['adId']
+        return self.id
 
-        print "accepting terms"
-        url = 'https://www.ksl.com/classifieds/sell-v1/' \
-              's-post-tos-submit/id/{}'.format(self.id)
-        payload = {
-            'id': self.id,
-            'memberstuff': '',
-            'next': 'Next Page >>',
-        }
-        resp = self.session.post(url, payload)
-        if self.debug:
-            open('3.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
-
-    def upload_image(self, img_path, description=''):
+    def upload_photo(self, img_path):
         """
         Uploads an image to the ad
         :param img_path: local path of image to upload. Should be 640x480
-        :param description: image description
         :return:
         """
-        print 'uploading {} - {}'.format(img_path, description)
-        url = 'https://www.ksl.com/classifieds/sell-v1/upload-photo'
+        print 'uploading {}'.format(img_path)
+        img_basename = os.path.basename(img_path)
+        img_size = os.path.getsize(img_path)
+        url = 'https://www.ksl.com/classifieds/sell/upload-photo?id={}&' \
+              'qqfile={}'.format(self.id, img_basename)
 
-        payload = {
-            'id': self.id,
-            'MAX_FILE_SIZE': 10000000,
-            'description': description,
-            'imageFileSubmit': 'Upload file',
+        headers = {
+            'Content-Type': 'multipart/form-data',
+            'X-File-Name': img_basename,
+            'X-File-Size': img_size,
+            'X-Requested-With': 'XMLHttpRequest',
         }
 
-        files = {
-            'imageFile': ('image.jpg', open(img_path, 'rb')),
-        }
-
-        resp = self.session.post(url, payload, files=files)
+        resp = self.session.post(url, headers=headers, data=open(img_path, 'rb'))
+        obj = json.loads(resp.text)
+        self.photos.append(obj)
         if self.debug:
-            open('image.html', 'w').write(resp.text.encode('utf-8', 'ignore'))
-
-    @staticmethod
-    def split_phone(phone):
-        """
-        Split a 10 digit phone number into its parts
-        :param phone: phone number eg. 8015551234
-        :return: array of parts eg. ['801', '555', '1234']
-        """
-        if not phone:
-            return ['', '', '']
-        phone = str(phone)
-        return [
-            phone[:3],
-            phone[3:6],
-            phone[-4:]
-        ]
+            open('img.json', 'w').write(resp.text.encode('utf-8', 'ignore'))
